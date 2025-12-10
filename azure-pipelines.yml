@@ -19,7 +19,7 @@ stages:
       inputs:
         deploymentScope: 'Resource Group'
         azureResourceManagerConnection: 'ar01.com'
-        subscriptionId: '75b542e1-4e29-46e3-84e4-a024586c6e4a'
+        subscriptionId: 'daba15d5-34df-43c0-b74a-3376ee974727'
         action: 'Create Or Update Resource Group'
         resourceGroupName: '$(resourceGroupName)'
         location: '$(location)'
