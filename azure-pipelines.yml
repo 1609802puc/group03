@@ -2,7 +2,9 @@ trigger:
 - main
 
 pool:
-  vmImage: 'windows-latest'
+  name: Default_2
+  demands:
+    - Agent.Name -equals ag001
 
 variables:
   location: 'westus3'
@@ -11,7 +13,7 @@ variables:
   templateFile: 'vm-iis-template.json'
   parametersFile: 'vm-iis-parameters.json'
   indexUrl: 'https://raw.githubusercontent.com/lmlpuc/lmlarm003/refs/heads/main/src/index.html'
-  scriptUrl: 'https://raw.githubusercontent.com/lmlpuc/lmlarm003/refs/heads/main/src/scripts/site.ps1' # Verifique se esta URL está correta
+  scriptUrl: 'https://raw.githubusercontent.com/lmlpuc/lmlarm003/refs/heads/main/src/scripts/site.ps1'
 
 stages:
 - stage: DeployInfra
@@ -20,10 +22,18 @@ stages:
   - job: Deploy
     displayName: 'Criar RG e recursos ARM'
     steps:
+    - powershell: |
+        Write-Host "Agent.Name=$(Agent.Name)"
+        Write-Host "Agent.MachineName=$(Agent.MachineName)"
+        hostname
+        whoami
+        az --version
+      displayName: 'Debug do agente (local)'
+
     - task: AzureCLI@2
       displayName: 'Criar Resource Group'
       inputs:
-        azureSubscription: 'ar01.com'  # 🔁 Substitua
+        azureSubscription: 'ar01.com'
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
@@ -33,7 +43,7 @@ stages:
       displayName: 'Deploy ARM Template'
       inputs:
         deploymentScope: 'Resource Group'
-        azureResourceManagerConnection: 'ar01.com'  # 🔁 Substitua
+        azureResourceManagerConnection: 'ar01.com'
         action: 'Create Or Update Resource Group'
         resourceGroupName: '$(resourceGroupName)'
         location: '$(location)'
@@ -50,10 +60,18 @@ stages:
   - job: PublishHTML
     displayName: 'Executar CustomScriptExtension para copiar index.html'
     steps:
+    - powershell: |
+        Write-Host "Agent.Name=$(Agent.Name)"
+        Write-Host "Agent.MachineName=$(Agent.MachineName)"
+        hostname
+        whoami
+        az --version
+      displayName: 'Debug do agente (local)'
+
     - task: AzureCLI@2
       displayName: 'Executar CustomScriptExtension'
       inputs:
-        azureSubscription: 'ar01.com'  # 🔁 Substitua
+        azureSubscription: 'ar01.com'
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
@@ -77,5 +95,4 @@ stages:
             --vm-name $vmName `
             --name CustomScriptExtension `
             --publisher Microsoft.Compute `
-            --settings @$jsonFile # Usa @ para indicar que é um caminho de arquivo
-  # fim
+            --settings @$jsonFile
