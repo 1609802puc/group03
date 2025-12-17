@@ -4,50 +4,47 @@ trigger:
 pool:
   name: Default_2
   demands:
-  - Agent.Name -equals ag001
+    - Agent.Name -equals ag001
  
 variables:
+  # Azure
   location: 'westus3'
-  resourceGroupName: 'rg-iac-web-iis2'
-  vmName: 'vm-iac-web-iis2'
+  resourceGroupName: 'rg-iac-web-iis'
+  vmName: 'vm-iac-web-iis'
  
-  # Arquivos ARM (VM)
+  # Service connection do Azure DevOps (ajuste para o NOME EXATO no DevOps)
+  azureServiceConnection: 'ar01com'
+ 
+  # ARM (VM + IIS)
   templateFile: 'arm-templates/vm-iis-template.json'
   parametersFile: 'arm-templates/vm-iis-parameters.json'
  
-  # Site / Script
+  # Conteúdo do site
   indexUrl: 'https://raw.githubusercontent.com/lmlpuc/lmlarm003/refs/heads/main/src/index.html'
-  scriptUrl: 'https://raw.githubusercontent.com/lmlpuc/lmlarm003/refs/heads/main/src/scripts/site.ps1'
  
 stages:
 - stage: DeployInfra
-  displayName: 'Provisionar Infraestrutura (VM)'
+  displayName: 'Provisionar Infraestrutura (VM + IIS)'
   jobs:
   - job: Deploy
     displayName: 'Criar RG + Deploy ARM (VM)'
     steps:
     - checkout: self
  
-    # (Opcional, mas ajuda MUITO a diagnosticar path)
-    - powershell: |
-        Write-Host "Workspace: $(System.DefaultWorkingDirectory)"
-        Get-ChildItem -Recurse "$(System.DefaultWorkingDirectory)\arm-templates" | Select FullName
-      displayName: 'Debug: listar arquivos em arm-templates'
- 
     - task: AzureCLI@2
       displayName: 'Criar Resource Group'
       inputs:
-        azureSubscription: 'ar01com'
+        azureSubscription: '$(azureServiceConnection)'
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
           az group create --name "$(resourceGroupName)" --location "$(location)"
  
     - task: AzureResourceManagerTemplateDeployment@3
-      displayName: 'Deploy ARM Template (VM)'
+      displayName: 'Deploy ARM Template (VM + IIS)'
       inputs:
         deploymentScope: 'Resource Group'
-        azureResourceManagerConnection: 'ar01com'
+        azureResourceManagerConnection: '$(azureServiceConnection)'
         action: 'Create Or Update Resource Group'
         resourceGroupName: '$(resourceGroupName)'
         location: '$(location)'
@@ -57,49 +54,69 @@ stages:
         deploymentMode: 'Incremental'
         deploymentName: 'vm-iis-deployment'
  
-    # Garante que a VM existe antes do stage 2
+    # Espera a VM existir antes do próximo stage (evita "ResourceNotFound")
     - task: AzureCLI@2
-      displayName: 'Validar que a VM foi criada'
+      displayName: 'Aguardar VM ficar disponível'
       inputs:
-        azureSubscription: 'ar01com'
+        azureSubscription: '$(azureServiceConnection)'
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          az vm show -g "$(resourceGroupName)" -n "$(vmName)" --query "name" -o tsv
- 
+          $rg = "$(resourceGroupName)"
+          $vm = "$(vmName)"
+          for ($i=1; $i -le 30; $i++) {
+            Write-Host "Tentativa $i/30: verificando VM $vm no RG $rg..."
+            $ok = az vm show -g $rg -n $vm --query "name" -o tsv 2>$null
+            if ($LASTEXITCODE -eq 0 -and $ok) {
+              Write-Host "VM encontrada: $ok"
+              break
+            }
+            Start-Sleep -Seconds 10
+          }
+          if (-not $ok) { throw "VM não ficou disponível a tempo. Verifique o deployment ARM." }
  
 - stage: ConfigureWebsite
-  displayName: 'Instalar IIS + Publicar site'
+  displayName: 'Publicar site no IIS'
   dependsOn: DeployInfra
-  condition: succeeded()
   jobs:
-  - job: PublishIIS
-    displayName: 'CustomScriptExtension (IIS + index.html)'
+  - job: PublishHTML
+    displayName: 'Copiar index.html para C:\inetpub\wwwroot'
     steps:
+    - checkout: self
+ 
     - task: AzureCLI@2
-      displayName: 'Executar CustomScriptExtension na VM'
+      displayName: 'Publicar index.html via RunCommand'
       inputs:
-        azureSubscription: 'ar01com'
+        azureSubscription: '$(azureServiceConnection)'
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          $resourceGroup = "$(resourceGroupName)"
-          $vmName = "$(vmName)"
-          $scriptUrl = "$(scriptUrl)"
-          $indexUrl  = "$(indexUrl)"
+          $rg = "$(resourceGroupName)"
+          $vm = "$(vmName)"
+          $url = "$(indexUrl)"
  
-          # JSON settings da extensão
-          $settings = @{
-            fileUris = @($scriptUrl)
-            commandToExecute = "powershell -ExecutionPolicy Bypass -File site.ps1 -IndexUrl `"$indexUrl`""
-          }
+          $ps = @"
+          \$ErrorActionPreference = 'Stop'
+          \$dest = 'C:\inetpub\wwwroot\index.html'
+          Invoke-WebRequest -Uri '$url' -OutFile \$dest -UseBasicParsing
+          iisreset
+          "@
  
-          $jsonFile = Join-Path $env:TEMP "customScriptSettings.json"
-          $settings | ConvertTo-Json -Depth 5 | Out-File -FilePath $jsonFile -Encoding ascii
+          az vm run-command invoke `
+            --resource-group $rg `
+            --name $vm `
+            --command-id RunPowerShellScript `
+            --scripts $ps
  
-          az vm extension set `
-            --resource-group $resourceGroup `
-            --vm-name $vmName `
-            --name CustomScriptExtension `
-            --publisher Microsoft.Compute `
-            --settings @$jsonFile
+    - task: AzureCLI@2
+      displayName: 'Mostrar IP/FQDN (saída do deployment)'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          $rg = "$(resourceGroupName)"
+          # Mostra os outputs do último deployment com esse nome
+          $out = az deployment group show -g $rg -n vm-iis-deployment --query "properties.outputs" -o json
+          Write-Host "Outputs do deployment (IP/FQDN):"
+          Write-Host $out
