@@ -52,8 +52,8 @@ stages:
         resourceGroupName: '$(resourceGroupName)'
         location: '$(location)'
         templateLocation: 'Linked artifact'
-        csmFile: 'webapp-template.json'
-        csmParametersFile: 'webapp-parameters.json'
+        csmFile: '$(templateFile)'
+        csmParametersFile: '$(parametersFile)'
         deploymentMode: 'Incremental'
         deploymentName: 'vm-iis-deployment'
  
