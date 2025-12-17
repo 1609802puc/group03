@@ -18,7 +18,7 @@
             "value": "SuaSenhaSeguraAqui123!"
         },
         "vmSku": {
-            "value": "Standard_B2s"
+            "value": "Standard_D2s_v3"
         },
         "windowsOSVersion": {
             "value": "2019-Datacenter"
@@ -26,4 +26,5 @@
     }
 
 }
+
 
