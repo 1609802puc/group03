@@ -37,26 +37,26 @@ stages:
         Get-ChildItem -Recurse "$(System.DefaultWorkingDirectory)\arm-templates" | Select FullName
       displayName: 'Debug: listar arquivos arm-templates'
 
-    - task: AzureCLI@2
-      displayName: 'Criar Resource Group (se não existir)'
-      inputs:
-        azureSubscription: '$(azureServiceConnection)'
-        scriptType: 'ps'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          $rg = "$(resourceGroupName)"
-          $loc = "$(location)"
+  - task: AzureCLI@2
+  displayName: 'Criar Resource Group (se não existir)'
+  inputs:
+    azureSubscription: '$(azureServiceConnection)'
+    scriptType: 'ps'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      $rg = "$(resourceGroupName)"
+      $loc = "$(location)"
 
-          Write-Host "Verificando RG: $rg"
-          az group show --name $rg 1>$null 2>$null
+      Write-Host "Verificando se o RG existe: $rg"
+      $exists = az group exists --name $rg
 
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "RG não existe. Criando em $loc..."
-            az group create --name $rg --location $loc
-          }
-          else {
-            Write-Host "RG já existe. Seguindo sem recriar."
-          }
+      if ($exists -eq "false") {
+        Write-Host "RG não existe. Criando em $loc..."
+        az group create --name $rg --location $loc
+      }
+      else {
+        Write-Host "RG já existe. Seguindo sem recriar."
+      }
 
     - task: AzureResourceManagerTemplateDeployment@3
       displayName: 'Deploy ARM Template (VM)'
