@@ -7,19 +7,19 @@ pool:
     - Agent.Name -equals ag001
 
 variables:
-  # Região e nomes
+  # Ajuste se precisar, mas mantenha consistente com seu RG/tenant
   location: 'westus3'
   resourceGroupName: 'rg-iac-web-iis'
   vmName: 'vm-iac-web-iis'
 
-  # Service Connection no Azure DevOps (Project Settings > Service connections)
+  # Nome exato da Service Connection no Azure DevOps
   azureServiceConnection: 'ar01com'
 
   # ARM (VM)
   templateFile: 'arm-templates/vm-iis-template.json'
   parametersFile: 'arm-templates/vm-iis-parameters.json'
 
-  # Script (IIS)
+  # Script que vai publicar/configurar o site (ex.: baixar index.html e copiar para inetpub)
   scriptUrl: 'https://raw.githubusercontent.com/lmlpuc/lmlarm003/refs/heads/main/src/scripts/site.ps1'
 
 stages:
@@ -31,32 +31,32 @@ stages:
     steps:
     - checkout: self
 
-    # (Opcional) ajuda a confirmar que os arquivos existem no workspace do agente
     - powershell: |
         Write-Host "Workspace: $(System.DefaultWorkingDirectory)"
-        Get-ChildItem -Recurse "$(System.DefaultWorkingDirectory)\arm-templates" | Select FullName
+        Write-Host "Listando arm-templates:"
+        dir "$(System.DefaultWorkingDirectory)\arm-templates" -Force
       displayName: 'Debug: listar arquivos arm-templates'
 
-  - task: AzureCLI@2
-  displayName: 'Criar Resource Group (se não existir)'
-  inputs:
-    azureSubscription: '$(azureServiceConnection)'
-    scriptType: 'ps'
-    scriptLocation: 'inlineScript'
-    inlineScript: |
-      $rg = "$(resourceGroupName)"
-      $loc = "$(location)"
+    - task: AzureCLI@2
+      displayName: 'Criar Resource Group (se não existir)'
+      inputs:
+        azureSubscription: '$(azureServiceConnection)'
+        scriptType: 'ps'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          $rg  = "$(resourceGroupName)"
+          $loc = "$(location)"
 
-      Write-Host "Verificando se o RG existe: $rg"
-      $exists = az group exists --name $rg
+          Write-Host "Verificando se o RG existe: $rg"
+          $exists = az group exists --name $rg
 
-      if ($exists -eq "false") {
-        Write-Host "RG não existe. Criando em $loc..."
-        az group create --name $rg --location $loc
-      }
-      else {
-        Write-Host "RG já existe. Seguindo sem recriar."
-      }
+          if ($exists -eq "false") {
+            Write-Host "RG não existe. Criando em $loc..."
+            az group create --name $rg --location $loc
+          }
+          else {
+            Write-Host "RG já existe. Seguindo sem recriar."
+          }
 
     - task: AzureResourceManagerTemplateDeployment@3
       displayName: 'Deploy ARM Template (VM)'
@@ -73,11 +73,11 @@ stages:
         deploymentName: 'vm-iis-deployment'
 
 - stage: ConfigureWebsite
-  displayName: 'Instalar IIS via CustomScriptExtension'
+  displayName: 'Publicar site no IIS (CustomScriptExtension)'
   dependsOn: DeployInfra
   condition: succeeded()
   jobs:
-  - job: InstallIIS
+  - job: PublishIIS
     displayName: 'Aguardar VM + Executar CustomScriptExtension'
     steps:
     - checkout: self
@@ -110,7 +110,7 @@ stages:
           }
 
     - task: AzureCLI@2
-      displayName: 'Executar CustomScriptExtension (instalar IIS)'
+      displayName: 'Executar CustomScriptExtension (site.ps1)'
       inputs:
         azureSubscription: '$(azureServiceConnection)'
         scriptType: 'ps'
@@ -120,13 +120,12 @@ stages:
           $resourceGroup = "$(resourceGroupName)"
           $scriptUrl = "$(scriptUrl)"
 
-          # Settings do CustomScriptExtension
           $settings = @{
             fileUris = @($scriptUrl)
             commandToExecute = "powershell -ExecutionPolicy Unrestricted -File site.ps1"
           }
 
-          $jsonFile = "customScriptSettings.json"
+          $jsonFile = Join-Path $env:TEMP "customScriptSettings.json"
           $settings | ConvertTo-Json -Depth 5 | Out-File -FilePath $jsonFile -Encoding ascii
 
           az vm extension set `
