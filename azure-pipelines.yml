@@ -2,7 +2,11 @@ trigger:
 - main
 
 pool:
-  vmImage: 'windows-latest'
+  name: Default # Nome do agent pool
+  demands:
+    - Agent.Name -equals ag001  # Força o uso do agente específico
+
+  #vmImage: 'windows-latest'
 
 variables:
   location: 'westus3'
@@ -23,7 +27,7 @@ stages:
     - task: AzureCLI@2
       displayName: 'Criar Resource Group'
       inputs:
-        azureSubscription: 'ar01com'  # 🔁 Substitua
+        azureSubscription: 'AZURE_Conn'  # 🔁 Substitua
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
@@ -33,7 +37,7 @@ stages:
       displayName: 'Deploy ARM Template'
       inputs:
         deploymentScope: 'Resource Group'
-        azureResourceManagerConnection: 'ar01com'  # 🔁 Substitua
+        azureResourceManagerConnection: 'AZURE_Conn'  # 🔁 Substitua
         action: 'Create Or Update Resource Group'
         resourceGroupName: '$(resourceGroupName)'
         location: '$(location)'
@@ -53,7 +57,7 @@ stages:
     - task: AzureCLI@2
       displayName: 'Executar CustomScriptExtension'
       inputs:
-        azureSubscription: 'ar01com'  # 🔁 Substitua
+        azureSubscription: 'AZURE_Conn'  # 🔁 Substitua
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
