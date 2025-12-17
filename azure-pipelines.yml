@@ -8,9 +8,10 @@ pool:
  
 variables:
   # Azure
-  location: 'Standard_B1ms'
+  location: 'centralus'
   resourceGroupName: 'rg-iac-web-iis'
   vmName: 'vm-iac-web-iis'
+  vmSku: 'Standard_B2s_v2'
  
   # Service connection do Azure DevOps (ajuste para o NOME EXATO no DevOps)
   azureServiceConnection: 'ar01com'
