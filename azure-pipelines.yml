@@ -82,55 +82,67 @@ stages:
     steps:
     - checkout: self
 
-    - task: AzureCLI@2
-      displayName: 'Aguardar VM ficar disponível'
-      inputs:
-        azureSubscription: '$(azureServiceConnection)'
-        scriptType: 'ps'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          $rg = "$(resourceGroupName)"
-          $vm = "$(vmName)"
+ - task: AzureCLI@2
+  displayName: 'Executar CustomScriptExtension (site.ps1)'
+  inputs:
+    azureSubscription: '$(azureServiceConnection)'
+    scriptType: 'ps'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      $rg = "$(resourceGroupName)"
+      $vm = "$(vmName)"
+      $scriptUrl = "$(scriptUrl)"
 
-          Write-Host "Aguardando VM existir: $vm em $rg"
-          $max = 30
-          for ($i=1; $i -le $max; $i++) {
-            az vm show -g $rg -n $vm 1>$null 2>$null
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "VM encontrada!"
-              break
-            }
-            Write-Host "VM ainda não encontrada... tentativa $i/$max"
-            Start-Sleep -Seconds 10
+      Write-Host "Verificando estado da VM $vm"
+
+      $state = az vm get-instance-view `
+        -g $rg `
+        -n $vm `
+        --query "instanceView.statuses[?starts_with(code,'PowerState/')].displayStatus" `
+        -o tsv
+
+      Write-Host "Estado atual: $state"
+
+      if ($state -ne "VM running") {
+        Write-Host "VM não está ligada. Iniciando..."
+        az vm start -g $rg -n $vm
+
+        Write-Host "Aguardando VM ficar Running..."
+        $max = 30
+        for ($i=1; $i -le $max; $i++) {
+          $state = az vm get-instance-view `
+            -g $rg `
+            -n $vm `
+            --query "instanceView.statuses[?starts_with(code,'PowerState/')].displayStatus" `
+            -o tsv
+
+          Write-Host "Tentativa $i/$max → Estado: $state"
+
+          if ($state -eq "VM running") {
+            break
           }
+          Start-Sleep -Seconds 10
+        }
+      }
 
-          az vm show -g $rg -n $vm 1>$null 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            throw "VM '$vm' não foi encontrada no RG '$rg'. Verifique se o ARM template criou a VM com esse nome."
-          }
+      if ($state -ne "VM running") {
+        throw "VM não ficou Running após o tempo limite."
+      }
 
-    - task: AzureCLI@2
-      displayName: 'Executar CustomScriptExtension (site.ps1)'
-      inputs:
-        azureSubscription: '$(azureServiceConnection)'
-        scriptType: 'ps'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          $vmName = "$(vmName)"
-          $resourceGroup = "$(resourceGroupName)"
-          $scriptUrl = "$(scriptUrl)"
+      Write-Host "VM está Running. Aplicando CustomScriptExtension..."
 
-          $settings = @{
-            fileUris = @($scriptUrl)
-            commandToExecute = "powershell -ExecutionPolicy Unrestricted -File site.ps1"
-          }
+      $settings = @{
+        fileUris = @($scriptUrl)
+        commandToExecute = "powershell -ExecutionPolicy Unrestricted -File site.ps1"
+      }
 
-          $jsonFile = Join-Path $env:TEMP "customScriptSettings.json"
-          $settings | ConvertTo-Json -Depth 5 | Out-File -FilePath $jsonFile -Encoding ascii
+      $jsonFile = Join-Path $env:TEMP "customScriptSettings.json"
+      $settings | ConvertTo-Json -Depth 5 | Out-File -FilePath $jsonFile -Encoding ascii
 
-          az vm extension set `
-            --resource-group $resourceGroup `
-            --vm-name $vmName `
-            --name CustomScriptExtension `
-            --publisher Microsoft.Compute `
-            --settings "@$jsonFile"
+      az vm extension set `
+        --resource-group $rg `
+        --vm-name $vm `
+        --name CustomScriptExtension `
+        --publisher Microsoft.Compute `
+        --settings "@$jsonFile"
+
