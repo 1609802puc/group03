@@ -8,7 +8,7 @@ pool:
  
 variables:
   # Azure
-  location: 'westus3'
+  location: 'Standard_B1ms'
   resourceGroupName: 'rg-iac-web-iis'
   vmName: 'vm-iac-web-iis'
  
