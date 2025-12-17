@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "siteName": {
-      "value": "lmliacpaas001-$(Build.BuildId)"
+      "value": "lmliacpaas001-rdo-20251217"
     },
     "location": {
       "value": "centralus"
