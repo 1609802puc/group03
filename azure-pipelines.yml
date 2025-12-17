@@ -27,7 +27,7 @@ stages:
     - task: AzureCLI@2
       displayName: 'Criar Resource Group'
       inputs:
-        azureSubscription: '130e18eb-a3ff-4995-a7f8-14aec2c06c47'  # 🔁 Substitua
+        azureSubscription: 'Azure subscription 1'  # 🔁 Substitua
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
@@ -37,7 +37,7 @@ stages:
       displayName: 'Deploy ARM Template'
       inputs:
         deploymentScope: 'Resource Group'
-        azureResourceManagerConnection: '130e18eb-a3ff-4995-a7f8-14aec2c06c47'  # 🔁 Substitua
+        azureResourceManagerConnection: 'Azure subscription 1'  # 🔁 Substitua
         action: 'Create Or Update Resource Group'
         resourceGroupName: '$(resourceGroupName)'
         location: '$(location)'
@@ -57,7 +57,7 @@ stages:
     - task: AzureCLI@2
       displayName: 'Executar CustomScriptExtension'
       inputs:
-        azureSubscription: '130e18eb-a3ff-4995-a7f8-14aec2c06c47'  # 🔁 Substitua
+        azureSubscription: 'Azure subscription 1'  # 🔁 Substitua
         scriptType: 'ps'
         scriptLocation: 'inlineScript'
         inlineScript: |
